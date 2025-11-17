@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quiz chuyên nghiệp - trắc nghiệm & điền ô</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+<style>
+  body, html {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  .quiz-container {
+    max-width: 720px;
+    width: 100%;
+    background: #fff;
+    padding: 30px 40px 40px;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgb(0 0 0 / 0.1);
+  }
+  .question-number {
+    font-weight: 500;
+    font-size: 1rem;
+    color: #6c757d;
+  }
+  .question-text {
+    font-weight: 700;
+    font-size: 1.6rem;
+    margin: 15px 0 25px;
+  }
+  .list-group-item {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.3s ease;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+  }
+  .list-group-item:hover:not(.correct):not(.incorrect) {
+    background-color: #e9ecef;
+  }
+  .correct {
+    background-color: #198754 !important;
+    color: white;
+    font-weight: 600;
+  }
+  .incorrect {
+    background-color: #dc3545 !important;
+    color: white;
+    font-weight: 600;
+  }
+  .btn-primary:disabled {
+    background-color: #6c757d !important;
+    border: none;
+  }
+  .progress {
+    height: 12px;
+    border-radius: 7px;
+    margin: 25px 0;
+  }
+  #scoreText {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #198754;
+    text-align: center;
+    margin-top: 30px;
+  }
+  #retryBtn {
+    display: block;
+    width: 100%;
+    margin-top: 20px;
+  }
+  #fillBlankInput.is-valid {
+    border-color: #198754;
+    color: #198754;
+    font-weight: 600;
+  }
+  #fillBlankInput.is-invalid {
+    border-color: #dc3545;
+    color: #dc3545;
+    font-weight: 600;
+  }
+  .correct-answer-text {
+    margin-top: 10px;
+    font-weight: 600;
+    color: #198754;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="quiz-container">
+  <div class="question-number" id="questionNumber"></div>
+  <div class="question-text" id="questionText"></div>
+  <ul class="list-group" id="options"></ul>
+
+  <button type="button" id="confirmBtn" class="btn btn-primary w-100 mt-3">Xác nhận</button>
+
+  <div class="progress">
+    <div class="progress-bar bg-primary" id="progressBar" style="width: 0%;" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+
+  <div id="scoreText"></div>
+  <button type="button" class="btn btn-success d-none" id="retryBtn">Làm lại</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Thay đường dẫn bên dưới thành tên file json thật!
+  const jsonUrl = 'quizizz_questions_converted.json';
+
+  let questions = [];
+  let currentIndex = 0;
+  let score = 0;
+  let answered = false;
+  let timeoutId = null;
+
+  const questionNumberEl = document.getElementById('questionNumber');
+  const questionTextEl = document.getElementById('questionText');
+  const optionsEl = document.getElementById('options');
+  const confirmBtn = document.getElementById('confirmBtn');
+  const progressBar = document.getElementById('progressBar');
+  const scoreText = document.getElementById('scoreText');
+  const retryBtn = document.getElementById('retryBtn');
+
+  function clearSelection() {
+    Array.from(optionsEl.children).forEach(li => {
+      li.classList.remove('active', 'correct', 'incorrect');
+    });
+  }
+
+  function getSelectedValue() {
+    const selected = Array.from(optionsEl.children).find(li => li.classList.contains('active'));
+    return selected ? parseInt(selected.getAttribute('data-value')) : null;
+  }
+
+  function renderQuestion(index) {
+    answered = false;
+    clearTimeout(timeoutId);
+    scoreText.textContent = '';
+    retryBtn.classList.add('d-none');
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Xác nhận';
+    optionsEl.innerHTML = '';
+
+    const q = questions[index];
+    questionNumberEl.textContent = `Câu hỏi ${index + 1} / ${questions.length}`;
+    questionTextEl.textContent = q.text;
+
+    // Xử lý fill-in-the-blank
+    if (q.type && q.type.toLowerCase().includes('fill')) {
+      const inputDiv = document.createElement('div');
+      inputDiv.classList.add('mb-3');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'fillBlankInput';
+      input.className = 'form-control';
+      input.placeholder = 'Nhập vào chỗ trống...';
+      inputDiv.appendChild(input);
+      optionsEl.appendChild(inputDiv);
+
+      confirmBtn.onclick = () => {
+        if (answered) return;
+        const userAnswer = input.value.trim().toLowerCase();
+        const correct = String(q.correct).trim().toLowerCase();
+        if (!userAnswer) {
+          alert('Vui lòng nhập đáp án!');
+          return;
+        }
+        answered = true;
+        confirmBtn.disabled = true;
+        if (userAnswer === correct) {
+          input.classList.add('is-valid');
+          score++;
+        } else {
+          input.classList.add('is-invalid');
+          const correctText = document.createElement('div');
+          correctText.className = 'correct-answer-text';
+          correctText.textContent = `Đáp án đúng: ${q.correct}`;
+          optionsEl.appendChild(correctText);
+        }
+        input.disabled = true;
+        setTimeout(() => {
+          currentIndex++;
+          if (currentIndex < questions.length) {
+            renderQuestion(currentIndex);
+          } else {
+            showResult();
+          }
+        }, 5000);
+      };
+
+    } else {
+      // Mặc định: Multiple Choice
+      if (q.options) {
+        q.options.forEach((opt, i) => {
+          const li = document.createElement('li');
+          li.classList.add('list-group-item');
+          li.textContent = opt;
+          li.setAttribute('data-value', i + 1);
+          li.onclick = () => {
+            if (answered) return;
+            clearSelection();
+            li.classList.add('active');
+          };
+          optionsEl.appendChild(li);
+        });
+
+        confirmBtn.onclick = () => {
+          if (answered) return;
+          const selectedValue = getSelectedValue();
+          if (selectedValue === null) {
+            alert('Vui lòng chọn đáp án!');
+            return;
+          }
+          answered = true;
+          confirmBtn.disabled = true;
+          if (selectedValue === q.correct) {
+            score++;
+          }
+          Array.from(optionsEl.children).forEach(li => {
+            const val = parseInt(li.getAttribute('data-value'));
+            if (val === q.correct) {
+              li.classList.add('correct');
+            } else if (li.classList.contains('active') && val !== q.correct) {
+              li.classList.add('incorrect');
+            }
+            li.classList.remove('active');
+          });
+          confirmBtn.textContent = 'Đang chờ chuyển câu hỏi tiếp...';
+          setTimeout(() => {
+            currentIndex++;
+            if (currentIndex < questions.length) {
+              renderQuestion(currentIndex);
+            } else {
+              showResult();
+            }
+          }, 5000);
+        };
+      }
+    }
+
+    updateProgressBar();
+  }
+
+  function updateProgressBar() {
+    const percent = (currentIndex / questions.length) * 100;
+    progressBar.style.width = `${percent}%`;
+  }
+
+  function showResult() {
+    questionNumberEl.textContent = 'Kết quả';
+    questionTextEl.textContent = '';
+    optionsEl.innerHTML = '';
+    progressBar.style.width = '100%';
+    confirmBtn.classList.add('d-none');
+    scoreText.textContent = `Bạn đã trả lời đúng ${score} trên tổng số ${questions.length} câu hỏi.`;
+    retryBtn.classList.remove('d-none');
+  }
+
+  function resetQuiz() {
+    currentIndex = 0;
+    score = 0;
+    answered = false;
+    scoreText.textContent = '';
+    retryBtn.classList.add('d-none');
+    confirmBtn.classList.remove('d-none');
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Xác nhận';
+    renderQuestion(currentIndex);
+  }
+
+  retryBtn.onclick = resetQuiz;
+
+  fetch(jsonUrl)
+    .then(response => response.json())
+    .then(data => {
+      questions = data;
+      currentIndex = 0;
+      score = 0;
+      renderQuestion(currentIndex);
+    })
+    .catch(err => {
+      alert('Lỗi tải dữ liệu câu hỏi. Vui lòng kiểm tra file JSON và đường dẫn.');
+      console.error(err);
+    });
+</script>
+</body>
+</html>
