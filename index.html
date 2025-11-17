@@ -6,6 +6,7 @@
 <title>Quiz chuyên nghiệp - trắc nghiệm & điền ô</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
 <style>
+  /* CSS giữ nguyên như lần trước */
   body, html {
     height: 100%;
     margin: 0;
@@ -13,7 +14,7 @@
     justify-content: center;
     align-items: center;
     background: #f8f9fa;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Arial', sans-serif;
   }
   .quiz-container {
     max-width: 720px;
@@ -42,7 +43,8 @@
     margin-bottom: 15px;
   }
   .list-group-item:hover:not(.correct):not(.incorrect) {
-    background-color: #e9ecef;
+    background-color: #047df7;
+    color: white;
   }
   .correct {
     background-color: #198754 !important;
@@ -110,9 +112,26 @@
   <button type="button" class="btn btn-success d-none" id="retryBtn">Làm lại</button>
 </div>
 
+<!-- Modal tùy chọn làm tiếp hay làm lại -->
+<div class="modal fade" id="resumeModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tiếp tục bài làm?</h5>
+      </div>
+      <div class="modal-body">
+        Bạn có muốn tiếp tục bài làm trước đó không?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="restartFromBeginning">Làm lại từ đầu</button>
+        <button type="button" class="btn btn-primary" id="continueQuiz">Làm tiếp</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  // Thay đường dẫn bên dưới thành tên file json thật!
   const jsonUrl = 'quizizz_questions_converted.json';
 
   let questions = [];
@@ -128,6 +147,31 @@
   const progressBar = document.getElementById('progressBar');
   const scoreText = document.getElementById('scoreText');
   const retryBtn = document.getElementById('retryBtn');
+
+  const resumeModal = new bootstrap.Modal(document.getElementById('resumeModal'));
+
+  // Lưu tiến độ
+  function saveProgress() {
+    const progress = {
+      currentIndex: currentIndex,
+      score: score
+    };
+    localStorage.setItem('quizProgress', JSON.stringify(progress));
+  }
+
+  // Load tiến độ
+  function loadProgress() {
+    const saved = localStorage.getItem('quizProgress');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return null;
+  }
+
+  // Xóa tiến độ
+  function clearProgress() {
+    localStorage.removeItem('quizProgress');
+  }
 
   function clearSelection() {
     Array.from(optionsEl.children).forEach(li => {
@@ -153,7 +197,6 @@
     questionNumberEl.textContent = `Câu hỏi ${index + 1} / ${questions.length}`;
     questionTextEl.textContent = q.text;
 
-    // Xử lý fill-in-the-blank
     if (q.type && q.type.toLowerCase().includes('fill')) {
       const inputDiv = document.createElement('div');
       inputDiv.classList.add('mb-3');
@@ -186,6 +229,7 @@
           optionsEl.appendChild(correctText);
         }
         input.disabled = true;
+        saveProgress();
         setTimeout(() => {
           currentIndex++;
           if (currentIndex < questions.length) {
@@ -197,7 +241,6 @@
       };
 
     } else {
-      // Mặc định: Multiple Choice
       if (q.options) {
         q.options.forEach((opt, i) => {
           const li = document.createElement('li');
@@ -234,6 +277,7 @@
             li.classList.remove('active');
           });
           confirmBtn.textContent = 'Đang chờ chuyển câu hỏi tiếp...';
+          saveProgress();
           setTimeout(() => {
             currentIndex++;
             if (currentIndex < questions.length) {
@@ -255,6 +299,7 @@
   }
 
   function showResult() {
+    clearProgress();
     questionNumberEl.textContent = 'Kết quả';
     questionTextEl.textContent = '';
     optionsEl.innerHTML = '';
@@ -265,6 +310,7 @@
   }
 
   function resetQuiz() {
+    clearProgress();
     currentIndex = 0;
     score = 0;
     answered = false;
@@ -278,13 +324,31 @@
 
   retryBtn.onclick = resetQuiz;
 
+  document.getElementById('continueQuiz').onclick = () => {
+    resumeModal.hide();
+    // render câu hỏi hiện tại đúng tiến độ
+    renderQuestion(currentIndex);
+  };
+
+  document.getElementById('restartFromBeginning').onclick = () => {
+    resumeModal.hide();
+    resetQuiz();
+  };
+
   fetch(jsonUrl)
     .then(response => response.json())
     .then(data => {
       questions = data;
-      currentIndex = 0;
-      score = 0;
-      renderQuestion(currentIndex);
+      const savedProgress = loadProgress();
+      if (savedProgress && savedProgress.currentIndex < questions.length) {
+        currentIndex = savedProgress.currentIndex;
+        score = savedProgress.score;
+        resumeModal.show();
+      } else {
+        currentIndex = 0;
+        score = 0;
+        renderQuestion(currentIndex);
+      }
     })
     .catch(err => {
       alert('Lỗi tải dữ liệu câu hỏi. Vui lòng kiểm tra file JSON và đường dẫn.');
