@@ -134,6 +134,7 @@
 <script>
   const jsonUrl = 'quiz_question.json';
 
+  let originalQuestions = [];
   let questions = [];
   let currentIndex = 0;
   let score = 0;
@@ -150,7 +151,7 @@
 
   const resumeModal = new bootstrap.Modal(document.getElementById('resumeModal'));
 
-  // Lưu tiến độ
+  // ================= LƯU / LOAD TIẾN ĐỘ =================
   function saveProgress() {
     const progress = {
       currentIndex: currentIndex,
@@ -159,7 +160,6 @@
     localStorage.setItem('quizProgress', JSON.stringify(progress));
   }
 
-  // Load tiến độ
   function loadProgress() {
     const saved = localStorage.getItem('quizProgress');
     if (saved) {
@@ -168,11 +168,50 @@
     return null;
   }
 
-  // Xóa tiến độ
   function clearProgress() {
     localStorage.removeItem('quizProgress');
+    localStorage.removeItem('quizOrder'); // xóa luôn thứ tự xáo trộn khi kết thúc / làm lại
   }
 
+  // ================= LƯU / LOAD THỨ TỰ XÁO TRỘN =================
+  function saveOrder(order) {
+    localStorage.setItem('quizOrder', JSON.stringify(order));
+  }
+
+  function loadOrder() {
+    const saved = localStorage.getItem('quizOrder');
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Fisher–Yates shuffle
+  function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  // Khởi tạo mảng questions theo thứ tự (cũ hoặc xáo trộn mới)
+  function initQuestions(data) {
+    originalQuestions = data;
+
+    let order = loadOrder();
+    if (!order || !Array.isArray(order) || order.length !== data.length) {
+      // Không có order cũ → tạo order mới & xáo trộn
+      order = data.map((_, index) => index); // [0,1,2,...]
+      shuffleArray(order);                   // xáo trộn
+      saveOrder(order);                      // lưu lại thứ tự xáo trộn
+    }
+
+    questions = order.map(i => data[i]);     // map thành mảng câu hỏi theo thứ tự đó
+  }
+
+  // ================= HÀM XỬ LÝ CÂU HỎI =================
   function clearSelection() {
     Array.from(optionsEl.children).forEach(li => {
       li.classList.remove('active', 'correct', 'incorrect');
@@ -197,6 +236,7 @@
     questionNumberEl.textContent = `Câu hỏi ${index + 1} / ${questions.length}`;
     questionTextEl.textContent = q.text;
 
+    // Fill-in-the-Blank
     if (q.type && q.type.toLowerCase().includes('fill')) {
       const inputDiv = document.createElement('div');
       inputDiv.classList.add('mb-3');
@@ -241,6 +281,7 @@
       };
 
     } else {
+      // Multiple Choice
       if (q.options) {
         q.options.forEach((opt, i) => {
           const li = document.createElement('li');
@@ -285,7 +326,7 @@
             } else {
               showResult();
             }
-          }, 3500);
+          }, 5000);
         };
       }
     }
@@ -299,7 +340,7 @@
   }
 
   function showResult() {
-    clearProgress();
+    clearProgress(); // xoá tiến độ + order cũ sau khi làm xong
     questionNumberEl.textContent = 'Kết quả';
     questionTextEl.textContent = '';
     optionsEl.innerHTML = '';
@@ -310,7 +351,10 @@
   }
 
   function resetQuiz() {
+    // Làm lại từ đầu → xoá tiến độ & tạo order xáo trộn mới
     clearProgress();
+    initQuestions(originalQuestions);
+
     currentIndex = 0;
     score = 0;
     answered = false;
@@ -326,7 +370,7 @@
 
   document.getElementById('continueQuiz').onclick = () => {
     resumeModal.hide();
-    // render câu hỏi hiện tại đúng tiến độ
+    // render câu hỏi hiện tại đúng tiến độ (thứ tự đã xáo trộn cũ)
     renderQuestion(currentIndex);
   };
 
@@ -335,14 +379,17 @@
     resetQuiz();
   };
 
+  // ================== LOAD FILE JSON & KHỞI TẠO ==================
   fetch(jsonUrl)
     .then(response => response.json())
     .then(data => {
-      questions = data;
+      initQuestions(data); // xáo trộn (hoặc dùng lại order cũ nếu có)
+
       const savedProgress = loadProgress();
       if (savedProgress && savedProgress.currentIndex < questions.length) {
         currentIndex = savedProgress.currentIndex;
         score = savedProgress.score;
+        // Có tiến độ cũ → hỏi người dùng muốn làm tiếp không
         resumeModal.show();
       } else {
         currentIndex = 0;
@@ -357,5 +404,4 @@
 </script>
 </body>
 </html>
-
 
